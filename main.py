@@ -1,12 +1,13 @@
 from flask import Flask, render_template, redirect, url_for, session, request
 import requests
+from dotenv import load_dotenv
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"
+app.secret_key = os.getenv("SECRET_KEY")
 
-CLIENT_ID = "a0d3125ad47c4a258f0ac6f1bd5ec2d3"
-CLIENT_SECRET = "fed86126a79a46738e4014602a54df58"
-REDIRECT_URI = "http://localhost:5000/callback"
+CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
