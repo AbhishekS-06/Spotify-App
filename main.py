@@ -1,6 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, session, request
-import requests
-import os
+import requests, os, logging
 from dotenv import load_dotenv
 
 app = Flask(__name__)
@@ -60,14 +59,39 @@ def playlists():
         return redirect(url_for("login"))
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(f"{API_BASE_URL}me/playlists", headers=headers)
-    playlists = response.json().get("items", [])
-    # Makes sure that only valid playlists go through as to not raise errors
-    valid_playlists = [
-        playlist for playlist in playlists
-        if playlist and "images" in playlist and playlist["images"]
-    ]
-    return render_template("playlists.html", playlists=valid_playlists)
+
+    try:
+        # Fetch playlists from Spotify API
+        response = requests.get(f"{API_BASE_URL}me/playlists", headers=headers)
+        response.raise_for_status()  # Raise HTTPError for bad responses (e.g., 401, 500)
+        playlists = response.json().get("items", [])
+
+        # Filter only valid playlists
+        valid_playlists = [
+            playlist for playlist in playlists
+            if playlist and "images" in playlist and playlist["images"]
+        ]
+
+        return render_template("playlists.html", playlists=valid_playlists)
+
+    except requests.exceptions.HTTPError as http_err:
+        # Handle specific HTTP errors (e.g., expired token, unauthorized)
+        if response.status_code == 401:
+            session.pop("access_token", None)  # Clear session and redirect to login
+            return redirect(url_for("login"))
+        return f"HTTP error occurred: {http_err}", 500
+
+    except requests.exceptions.RequestException as req_err:
+        # Handle other request issues (e.g., connection errors)
+        return f"Request error occurred: {req_err}", 500
+
+    except KeyError as key_err:
+        # Handle unexpected API response structure
+        return f"Unexpected data format: {key_err}", 500
+
+    except Exception as e:
+        # Catch-all for other exceptions
+        return f"An error occurred: {e}", 500
 
 
 if __name__ == "__main__":
