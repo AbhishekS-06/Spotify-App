@@ -14,7 +14,6 @@ AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 API_BASE_URL = "https://api.spotify.com/v1/"
 
-
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -47,6 +46,7 @@ def callback():
     response = requests.post(TOKEN_URL, data=payload)
     token_info = response.json()
     access_token = token_info.get("access_token")
+
     # Store access token in session for later use
     session["access_token"] = access_token
     return redirect(url_for("playlists"))
@@ -62,7 +62,12 @@ def playlists():
     headers = {"Authorization": f"Bearer {access_token}"}
     response = requests.get(f"{API_BASE_URL}me/playlists", headers=headers)
     playlists = response.json().get("items", [])
-    return render_template("playlists.html", playlists=playlists)
+    # Makes sure that only valid playlists go through as to not raise errors
+    valid_playlists = [
+        playlist for playlist in playlists
+        if playlist and "images" in playlist and playlist["images"]
+    ]
+    return render_template("playlists.html", playlists=valid_playlists)
 
 
 if __name__ == "__main__":
