@@ -25,7 +25,7 @@ def login():
         "client_id": CLIENT_ID,
         "response_type": "code",
         "redirect_uri": REDIRECT_URI,
-        "scope": "user-read-private user-read-email playlist-read-private",
+        "scope": "playlist-read-private playlist-read-collaborative user-read-private user-read-email",
     }
     spotify_auth_url = f"{AUTH_URL}?{requests.compat.urlencode(params)}"
     return redirect(spotify_auth_url)
@@ -53,46 +53,59 @@ def callback():
 
 @app.route("/playlists")
 def playlists():
-    # Fetch user playlists
+    # Refresh the access token if necessary
     access_token = session.get("access_token")
     if not access_token:
         return redirect(url_for("login"))
 
-    headers = {"Authorization": f"Bearer {access_token}"}
+    # Use the helper function to ensure the token is valid
+    refreshed_token = refresh_access_token()
+    if refreshed_token:
+        access_token = refreshed_token
 
+    headers = {"Authorization": f"Bearer {access_token}"}
     try:
         # Fetch playlists from Spotify API
         response = requests.get(f"{API_BASE_URL}me/playlists", headers=headers)
-        response.raise_for_status()  # Raise HTTPError for bad responses (e.g., 401, 500)
+        response.raise_for_status()  # Raise HTTP errors if they occur
         playlists = response.json().get("items", [])
-
-        # Filter only valid playlists
         valid_playlists = [
             playlist for playlist in playlists
             if playlist and "images" in playlist and playlist["images"]
         ]
-
         return render_template("playlists.html", playlists=valid_playlists)
 
     except requests.exceptions.HTTPError as http_err:
-        # Handle specific HTTP errors (e.g., expired token, unauthorized)
         if response.status_code == 401:
-            session.pop("access_token", None)  # Clear session and redirect to login
+            # Clear session and redirect to login if the refresh failed
+            session.pop("access_token", None)
+            session.pop("refresh_token", None)
             return redirect(url_for("login"))
         return f"HTTP error occurred: {http_err}", 500
 
-    except requests.exceptions.RequestException as req_err:
-        # Handle other request issues (e.g., connection errors)
-        return f"Request error occurred: {req_err}", 500
-
-    except KeyError as key_err:
-        # Handle unexpected API response structure
-        return f"Unexpected data format: {key_err}", 500
-
     except Exception as e:
-        # Catch-all for other exceptions
         return f"An error occurred: {e}", 500
 
+def refresh_access_token():
+    refresh_token = session.get("refresh_token")
+    if not refresh_token:
+        return None
+
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+    }
+    response = requests.post(TOKEN_URL, data=payload)
+    if response.status_code == 200:
+        token_info = response.json()
+        # Update the session with the new access token
+        session["access_token"] = token_info.get("access_token")
+        return session["access_token"]
+    else:
+        print(f"Failed to refresh token: {response.json()}")
+        return None
 
 if __name__ == "__main__":
     app.run(debug=True)
