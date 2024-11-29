@@ -24,13 +24,11 @@ def login():
         "client_id": CLIENT_ID,
         "response_type": "code",
         "redirect_uri": REDIRECT_URI,
-        "scope": "playlist-read-private playlist-read-collaborative user-read-email user-read-private"    }
+        "scope": "playlist-read-private playlist-read-collaborative user-read-private user-read-email",
+        "show_dialog": "true"  # Forces the login dialog
+    }
     spotify_auth_url = f"{AUTH_URL}?{requests.compat.urlencode(params)}"
     return redirect(spotify_auth_url)
-
-'''@app.route("/callback")
-def callback():
-    return "Callback route is working!", 200'''
 
 @app.route("/callback")
 def callback():
@@ -68,17 +66,15 @@ def callback():
 
 @app.route("/playlists")
 def playlists():
-    # Debugging: Log the access token
+    # Check if user is logged in
     access_token = session.get("access_token")
-    
     if not access_token:
-        return redirect(url_for("login"))
+        return redirect(url_for("login"))  # Redirect to login if no access token
 
     headers = {"Authorization": f"Bearer {access_token}"}
     try:
         response = requests.get(f"{API_BASE_URL}me/playlists", headers=headers)
-        print(f"Spotify API Response: {response.status_code}, {response.text}")  # Log the response
-        response.raise_for_status()  # Raise error if status is not 2xx
+        response.raise_for_status()
         playlists = response.json().get("items", [])
         valid_playlists = [
             playlist for playlist in playlists
@@ -86,8 +82,13 @@ def playlists():
         ]
         return render_template("playlists.html", playlists=valid_playlists)
     except requests.exceptions.HTTPError as http_err:
-        print(f"HTTP error occurred: {http_err}")
-        return f"HTTP error occurred: {http_err}", 500
+        # Handle token expiry or invalid token
+        session.pop("access_token", None)
+        session.pop("refresh_token", None)
+        return redirect(url_for("login"))  # Redirect to login
+
+    except Exception as e:
+        return f"An error occurred: {e}", 500
 
 def refresh_access_token():
     refresh_token = session.get("refresh_token")
